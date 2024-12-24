@@ -1,0 +1,13 @@
+train: ../train/images
+val: ../valid/images
+test: ../test/images
+
+nc: 9
+names: ['construction', 'crossing', 'green', 'intersection', 'left', 'parking', 'red_yellow', 'right', 'tunnel']
+
+roboflow:
+  workspace: sem2l1
+  project: competition-u1dph
+  version: 5
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/sem2l1/competition-u1dph/dataset/5
