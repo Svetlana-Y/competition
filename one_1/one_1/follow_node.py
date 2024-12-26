@@ -1,6 +1,6 @@
-import os
 import time
 from collections import deque
+from types import SimpleNamespace
 
 # модули
 # конфигуратор
@@ -19,6 +19,9 @@ from module.traffic_lights import check_traffic_lights
 from module.traffic_intersection import check_direction
 from module.traffic_construction import avoid_walls
 from module.yolo import find_target_sign
+from module.pedestrian_crossing import walker
+from module.tunnel_space import dark_tunnel
+from module.parking import parking
 
 import rclpy
 from rclpy.node import Node
@@ -62,6 +65,7 @@ class Follow_Trace_Node(Node):
         self.lidar_data = LaserScan()
         
         self._linear_speed = linear_speed
+        self._prev__linear_speed = linear_speed
         self._yellow_prevs = deque([0], maxlen=1)
         self.__white_prevs = deque([0], maxlen=1)
 
@@ -75,22 +79,21 @@ class Follow_Trace_Node(Node):
         self.avoidance = 0
         self.prev_e = 0
         self.E = 0
-        self.parking = 0
+        self.parking = SimpleNamespace(state=0, side=0)
+        self.finish_parking = 0
         self.angle = 0
 
         self.STATUS_CAR = 0
         self.TASK_LEVEL = 0
 
         self.MAIN_LINE = "WHITE"
-
-        #self.parking_end = 0
-        #self.tunnel_started = 0
-        #self.pedestrian_started = 0
+        self.pedestrian_started = False
 
         pkg_project_path = get_package_share_directory("one_1")
         self.model = YOLO(f"{pkg_project_path}/data/best_1.pt")
 
         self.next_goal = 0
+        self.sleep = 1
     
     def pose_callback(self, data):
         self.pose = data
@@ -179,7 +182,7 @@ class Follow_Trace_Node(Node):
         self.point_status = True
 
         twist = Twist()
-        twist.linear.x = self._linear_speed
+        twist.linear.x = float(self._linear_speed)
 
         cvImg = self._cv_bridge.imgmsg_to_cv2(
             msg, desired_encoding=msg.encoding)
@@ -205,7 +208,7 @@ class Follow_Trace_Node(Node):
         if self.TASK_LEVEL == 1:
             check_direction(self, cvImg)
         
-        if ((self.TASK_LEVEL * 2) % 2) == 1:
+        if ((self.TASK_LEVEL * 2) % 2) == 1 and self.TASK_LEVEL != 4.5:
             find_target_sign(self, cvImg, treshold = 22000)
 
         if self.TASK_LEVEL == 2:
@@ -214,12 +217,19 @@ class Follow_Trace_Node(Node):
 
         if self.TASK_LEVEL == 3:
             self.MAIN_LINE = "YELLOW"
+            parking(self)
             
+        if self.TASK_LEVEL == 3.5 and (time.time()-self.finish_parking > 12):
+            self.MAIN_LINE = "WHITE"
+                  
         if self.TASK_LEVEL == 4:
-            return
+            walker(self, cvImg)
+        
+        if ((self.TASK_LEVEL * 2) % 2) == 1 and self.TASK_LEVEL == 4.5:
+            find_target_sign(self, cvImg, treshold = 12000)
             
         if self.TASK_LEVEL == 5:
-            return
+            dark_tunnel(self, cvImg)
 
         if (abs(direction) > DIFF_CENTERS) and self.TASK_LEVEL != 5:
             angle_to_goal = math.atan2(
@@ -229,7 +239,7 @@ class Follow_Trace_Node(Node):
 
             twist.linear.x = abs(self._linear_speed * (1 - abs(angular_v * (3 / 4 if ANALOG_CAP_MODE else 1))))
 
-        if self.STATUS_CAR == 1 and self.avoidance == 0 and self.parking == 0:
+        if self.STATUS_CAR == 1 and self.avoidance == 0 and self.parking.state == 0:
             self._robot_cmd_vel_pub.publish(twist)
 
 def main():

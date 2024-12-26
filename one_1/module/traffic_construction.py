@@ -54,8 +54,6 @@ def avoid_walls(follow_trace, img):
     scan_data = follow_trace.lidar_data.ranges
     front = min(scan_data[0:10]+scan_data[349:359])
 
-    put_log(follow_trace, message=f" Avoidance : {follow_trace.avoidance}")
-
     if front < 0.45:
         put_log(follow_trace, message=f"Обнаружено препятствие впереди, поворачиваем")
         
